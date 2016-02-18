@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:mulexml="http://www.mulesoft.org/schema/mule/xml" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:mongo="http://www.mulesoft.org/schema/mule/mongo" xmlns:s3="http://www.mulesoft.org/schema/mule/s3" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/s3 http://www.mulesoft.org/schema/mule/s3/current/mule-s3.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/mongo http://www.mulesoft.org/schema/mule/mongo/current/mule-mongo.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/xml http://www.mulesoft.org/schema/mule/xml/current/mule-xml.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+    <s3:config name="Amazon_S3__Configuration" accessKey="AKIAITHHT6X7FLQAUFMQ" secretKey="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" doc:name="Amazon S3: Configuration"/>
+    <mongo:config name="Mongo_DB" username="retoisuser" password="12345" database="reto10" doc:name="Mongo DB"/>
+    <flow name="PostArchivo">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/retois" doc:name="HTTP" allowedMethods="POST"/>
+        <logger message="#['nombreArchivo: '+message.inboundProperties.'http.query.params'.nombreArchivo]" level="INFO" doc:name="Logger"/>
+        <response>
+            <set-payload value="#['Archivo '+ message.outboundProperties.nombreArchivo +' ha sido guardado exitosamente en MongoDB']" doc:name="Set Payload"/>
+        </response>
+        <set-property propertyName="nombreArchivo" value="#[message.inboundProperties.'http.query.params'.nombreArchivo]" doc:name="Set nombreArchivo"/>
+        <s3:get-object-content config-ref="Amazon_S3__Configuration" bucketName="s3-helios-dev-prodigiousintegration" key="#['challenge/'+message.inboundProperties.'http.query.params'.nombreArchivo]" doc:name="Amazon S3"/>
+        <json:xml-to-json-transformer doc:name="XML to JSON"/>
+        <custom-transformer class="com.prodigious.retois.NombreArchivoJsonTransformer" doc:name="Add Book Name"/>
+        <mongo:insert-object config-ref="Mongo_DB" collection="retoiscollection" doc:name="Mongo DB"/>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+        <catch-exception-strategy doc:name="retoisCatch_Exception_Strategy">
+            <set-payload value="#['Se presentaron problemas conviertiendo el archivo: '+message.inboundProperties.'http.query.params'.nombreArchivo + ' Por favor revise que el archivo existe en S3 y que la db Mongo esta arriba']" doc:name="Set Payload"/>
+            <logger message="#['Payload NULL']" level="INFO" doc:name="Logger"/>
+        </catch-exception-strategy>
+    </flow>
+    <flow name="getArchivo">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/retois" doc:name="HTTP" allowedMethods="GET"/>
+        <mongo:find-one-object-using-query-map config-ref="Mongo_DB" collection="retoiscollection" failOnNotFound="false" doc:name="Mongo DB">
+            <mongo:query-attributes>
+                <mongo:query-attribute key="nombreArchivo">#[message.inboundProperties.'http.query.params'.nombreArchivo]</mongo:query-attribute>
+            </mongo:query-attributes>
+        </mongo:find-one-object-using-query-map>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <logger level="INFO" doc:name="Logger"/>
+        <catch-exception-strategy doc:name="Catch Exception Strategy">
+            <set-payload value="#['El archivo: '+message.inboundProperties.'http.query.params'.nombreArchivo + ' no existe en MongoDB o la base de datos no esta activa']" doc:name="Set Payload"/>
+            <logger level="INFO" doc:name="Logger"/>
+        </catch-exception-strategy>
+    </flow>
+</mule>

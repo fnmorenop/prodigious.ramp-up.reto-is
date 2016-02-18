@@ -1,0 +1,11 @@
+{
+    "inputMessageMetadata": {
+        "messagePayload": {
+            "connectorName": "Amazon_S3__Configuration",
+            "typeId": "org.mule.module.s3.model.S3Object"
+        }
+    },
+    "outputMessageMetadata": {},
+    "id": "47d95b65-77fa-4610-a65f-f897b8008eef",
+    "version": "5.2.0.0"
+}
